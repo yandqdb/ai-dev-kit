@@ -3,113 +3,111 @@ Unity Catalog - Table Operations
 
 Functions for managing tables in Unity Catalog.
 """
-from typing import List, Dict, Any, Optional
-from ..client import DatabricksClient
+from typing import List, Optional
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.catalog import TableInfo, ColumnInfo, TableType, DataSourceFormat
 
 
-def list_tables(client: DatabricksClient, catalog_name: str, schema_name: str) -> List[Dict[str, Any]]:
+def list_tables(catalog_name: str, schema_name: str) -> List[TableInfo]:
     """
     List all tables in a schema.
 
     Args:
-        client: Databricks client instance
         catalog_name: Name of the catalog
         schema_name: Name of the schema
 
     Returns:
-        List of table dictionaries with metadata
+        List of TableInfo objects with table metadata
 
     Raises:
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    response = client.get(
-        "/api/2.1/unity-catalog/tables",
-        params={
-            "catalog_name": catalog_name,
-            "schema_name": schema_name
-        }
-    )
-    return response.get("tables", [])
+    w = WorkspaceClient()
+    return list(w.tables.list(
+        catalog_name=catalog_name,
+        schema_name=schema_name
+    ))
 
 
-def get_table(client: DatabricksClient, full_table_name: str) -> Dict[str, Any]:
+def get_table(full_table_name: str) -> TableInfo:
     """
     Get detailed information about a specific table.
 
     Args:
-        client: Databricks client instance
         full_table_name: Full table name (catalog.schema.table format)
 
     Returns:
-        Dictionary with table metadata including:
+        TableInfo object with table metadata including:
         - name, full_name, catalog_name, schema_name
         - table_type, owner, comment
         - created_at, updated_at
         - storage_location, columns
 
     Raises:
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    return client.get(f"/api/2.1/unity-catalog/tables/{full_table_name}")
+    w = WorkspaceClient()
+    return w.tables.get(full_name=full_table_name)
 
 
 def create_table(
-    client: DatabricksClient,
     catalog_name: str,
     schema_name: str,
     table_name: str,
-    columns: List[Dict[str, Any]],
-    table_type: str = "MANAGED",
+    columns: List[ColumnInfo],
+    table_type: TableType = TableType.MANAGED,
     comment: Optional[str] = None,
     storage_location: Optional[str] = None
-) -> Dict[str, Any]:
+) -> TableInfo:
     """
     Create a new table in Unity Catalog.
 
     Args:
-        client: Databricks client instance
         catalog_name: Name of the catalog
         schema_name: Name of the schema
         table_name: Name of the table to create
-        columns: List of column definitions, each with 'name' and 'type_name' keys
-                 Example: [{"name": "id", "type_name": "INT"}, {"name": "value", "type_name": "STRING"}]
-        table_type: Type of table - "MANAGED" or "EXTERNAL" (default: "MANAGED")
+        columns: List of ColumnInfo objects defining table columns
+                 Example: [ColumnInfo(name="id", type_name="INT"),
+                          ColumnInfo(name="value", type_name="STRING")]
+        table_type: TableType.MANAGED or TableType.EXTERNAL (default: TableType.MANAGED)
         comment: Optional description of the table
         storage_location: Storage location for EXTERNAL tables
 
     Returns:
-        Dictionary with created table metadata
+        TableInfo object with created table metadata
 
     Raises:
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    payload = {
+    w = WorkspaceClient()
+
+    # Build kwargs conditionally
+    kwargs = {
         "name": table_name,
         "catalog_name": catalog_name,
         "schema_name": schema_name,
         "table_type": table_type,
         "columns": columns,
-        "data_source_format": "DELTA"
+        "data_source_format": DataSourceFormat.DELTA
     }
 
     if comment:
-        payload["comment"] = comment
+        kwargs["comment"] = comment
+    if storage_location and table_type == TableType.EXTERNAL:
+        kwargs["storage_location"] = storage_location
 
-    if storage_location and table_type == "EXTERNAL":
-        payload["storage_location"] = storage_location
-
-    return client.post("/api/2.1/unity-catalog/tables", json=payload)
+    return w.tables.create(**kwargs)
 
 
-def delete_table(client: DatabricksClient, full_table_name: str) -> None:
+def delete_table(full_table_name: str) -> None:
     """
     Delete a table from Unity Catalog.
 
     Args:
-        client: Databricks client instance
         full_table_name: Full table name (catalog.schema.table format)
 
     Raises:
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    client.delete(f"/api/2.1/unity-catalog/tables/{full_table_name}")
+    w = WorkspaceClient()
+    w.tables.delete(full_name=full_table_name)

@@ -7,45 +7,38 @@ import os
 import sys
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../databricks-mcp-core"))
+sys.path.insert(
+    0, os.path.join(os.path.dirname(__file__), "../../../databricks-mcp-core")
+)
 
-from databricks_mcp_core.client import DatabricksClient
-from databricks_mcp_core.compute import execution
-
-
-# Lazy client initialization
-_client = None
-
-def get_client():
-    """
-    Get or create Databricks client.
-
-    Uses DATABRICKS_CONFIG_PROFILE env var if set, otherwise falls back to
-    DATABRICKS_HOST/DATABRICKS_TOKEN env vars.
-    """
-    global _client
-    if _client is None:
-        _client = DatabricksClient()
-    return _client
+from databricks_mcp_core.compute import execution  # noqa: E402
 
 
 def create_context_tool(arguments: dict) -> dict:
     """MCP tool: Create execution context"""
     try:
         context_id = execution.create_context(
-            get_client(),
             arguments.get("cluster_id"),
             arguments.get("language", "python")
         )
+        cluster_id = arguments.get('cluster_id')
+        language = arguments.get('language', 'python')
         return {
             "content": [{
                 "type": "text",
-                "text": f"Context created successfully!\n\nContext ID: {context_id}\nCluster ID: {arguments.get('cluster_id')}\nLanguage: {arguments.get('language', 'python')}\n\nUse this context_id for subsequent commands to maintain state."
+                "text": f"Context created successfully!\n\n"
+                       f"Context ID: {context_id}\n"
+                       f"Cluster ID: {cluster_id}\n"
+                       f"Language: {language}\n\n"
+                       f"Use this context_id for subsequent commands."
             }]
         }
     except Exception as e:
         return {
-            "content": [{"type": "text", "text": f"Error creating context: {str(e)}"}],
+            "content": [{
+                "type": "text",
+                "text": f"Error creating context: {str(e)}"
+            }],
             "isError": True
         }
 
@@ -54,7 +47,6 @@ def execute_command_with_context_tool(arguments: dict) -> dict:
     """MCP tool: Execute command with context"""
     try:
         result = execution.execute_command_with_context(
-            get_client(),
             arguments.get("cluster_id"),
             arguments.get("context_id"),
             arguments.get("code")
@@ -63,7 +55,10 @@ def execute_command_with_context_tool(arguments: dict) -> dict:
             return {"content": [{"type": "text", "text": result.output}]}
         else:
             return {
-                "content": [{"type": "text", "text": f"Error: {result.error}"}],
+                "content": [{
+                    "type": "text",
+                    "text": f"Error: {result.error}"
+                }],
                 "isError": True
             }
     except Exception as e:
@@ -76,17 +71,23 @@ def execute_command_with_context_tool(arguments: dict) -> dict:
 def destroy_context_tool(arguments: dict) -> dict:
     """MCP tool: Destroy execution context"""
     try:
+        context_id = arguments.get('context_id')
         execution.destroy_context(
-            get_client(),
             arguments.get("cluster_id"),
-            arguments.get("context_id")
+            context_id
         )
         return {
-            "content": [{"type": "text", "text": f"Context {arguments.get('context_id')} destroyed successfully!"}]
+            "content": [{
+                "type": "text",
+                "text": f"Context {context_id} destroyed successfully!"
+            }]
         }
     except Exception as e:
         return {
-            "content": [{"type": "text", "text": f"Error destroying context: {str(e)}"}],
+            "content": [{
+                "type": "text",
+                "text": f"Error destroying context: {str(e)}"
+            }],
             "isError": True
         }
 
@@ -95,16 +96,19 @@ def databricks_command_tool(arguments: dict) -> dict:
     """MCP tool: Execute one-off Databricks command"""
     try:
         result = execution.execute_databricks_command(
-            get_client(),
             arguments.get("cluster_id"),
             arguments.get("language", "python"),
-            arguments.get("code")
+            arguments.get("code"),
+            arguments.get("timeout", 120)
         )
         if result.success:
             return {"content": [{"type": "text", "text": result.output}]}
         else:
             return {
-                "content": [{"type": "text", "text": f"Error: {result.error}"}],
+                "content": [{
+                    "type": "text",
+                    "text": f"Error: {result.error}"
+                }],
                 "isError": True
             }
     except Exception as e:
@@ -128,13 +132,13 @@ def get_tool_definitions():
     return [
         {
             "name": "create_context",
-            "description": "Create a new execution context on Databricks cluster. Returns a context_id that can be used for subsequent commands to maintain state (variables, imports, etc) between calls.",
+            "description": "Create execution context on cluster",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "cluster_id": {
                         "type": "string",
-                        "description": "Databricks cluster ID"
+                        "description": "ID of the cluster"
                     },
                     "language": {
                         "type": "string",
@@ -147,13 +151,13 @@ def get_tool_definitions():
         },
         {
             "name": "execute_command_with_context",
-            "description": "Execute code using an existing context. This maintains state between calls - variables, imports, and data persist across commands. Use create_context first to get a context_id.",
+            "description": "Execute code using existing context",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "cluster_id": {
                         "type": "string",
-                        "description": "Databricks cluster ID"
+                        "description": "ID of the cluster"
                     },
                     "context_id": {
                         "type": "string",
@@ -161,7 +165,7 @@ def get_tool_definitions():
                     },
                     "code": {
                         "type": "string",
-                        "description": "Python code to execute"
+                        "description": "Code to execute"
                     }
                 },
                 "required": ["cluster_id", "context_id", "code"]
@@ -169,13 +173,13 @@ def get_tool_definitions():
         },
         {
             "name": "destroy_context",
-            "description": "Destroy an execution context to free resources. Call this when you're done with a context.",
+            "description": "Destroy an execution context",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "cluster_id": {
                         "type": "string",
-                        "description": "Databricks cluster ID"
+                        "description": "ID of the cluster"
                     },
                     "context_id": {
                         "type": "string",
@@ -187,25 +191,30 @@ def get_tool_definitions():
         },
         {
             "name": "databricks_command",
-            "description": "Executes Python code on a Databricks cluster via the Command Execution API (creates and destroys context automatically - does NOT maintain state between calls)",
+            "description": "Execute one-off command (creates/destroys context)",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "cluster_id": {
                         "type": "string",
-                        "description": "Databricks cluster ID"
+                        "description": "ID of the cluster"
                     },
                     "language": {
                         "type": "string",
-                        "description": "Language (python, scala, etc)",
+                        "description": "Language (python, scala, sql, r)",
                         "default": "python"
                     },
                     "code": {
                         "type": "string",
                         "description": "Code to execute"
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Timeout in seconds",
+                        "default": 120
                     }
                 },
-                "required": ["cluster_id", "language", "code"]
+                "required": ["cluster_id", "code"]
             }
-        },
+        }
     ]

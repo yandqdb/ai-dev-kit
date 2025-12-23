@@ -3,129 +3,118 @@ Unity Catalog - Schema Operations
 
 Functions for managing schemas (databases) in Unity Catalog.
 """
-from typing import List, Dict, Any, Optional
-from ..client import DatabricksClient
+from typing import List, Optional
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.catalog import SchemaInfo
 
 
-def list_schemas(client: DatabricksClient, catalog_name: str) -> List[Dict[str, Any]]:
+def list_schemas(catalog_name: str) -> List[SchemaInfo]:
     """
     List all schemas in a catalog.
 
     Args:
-        client: Databricks client instance
         catalog_name: Name of the catalog
 
     Returns:
-        List of schema dictionaries with metadata
+        List of SchemaInfo objects with schema metadata
 
     Raises:
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    response = client.get(
-        "/api/2.1/unity-catalog/schemas",
-        params={"catalog_name": catalog_name}
-    )
-    return response.get("schemas", [])
+    w = WorkspaceClient()
+    return list(w.schemas.list(catalog_name=catalog_name))
 
 
-def get_schema(client: DatabricksClient, full_schema_name: str) -> Dict[str, Any]:
+def get_schema(full_schema_name: str) -> SchemaInfo:
     """
     Get detailed information about a specific schema.
 
     Args:
-        client: Databricks client instance
         full_schema_name: Full schema name (catalog.schema format)
 
     Returns:
-        Dictionary with schema metadata including:
+        SchemaInfo object with schema metadata including:
         - name, full_name, catalog_name, owner, comment
         - created_at, updated_at
         - storage_location
 
     Raises:
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    return client.get(f"/api/2.1/unity-catalog/schemas/{full_schema_name}")
+    w = WorkspaceClient()
+    return w.schemas.get(full_name=full_schema_name)
 
 
 def create_schema(
-    client: DatabricksClient,
     catalog_name: str,
     schema_name: str,
     comment: Optional[str] = None
-) -> Dict[str, Any]:
+) -> SchemaInfo:
     """
     Create a new schema in Unity Catalog.
 
     Args:
-        client: Databricks client instance
         catalog_name: Name of the catalog
         schema_name: Name of the schema to create
         comment: Optional description of the schema
 
     Returns:
-        Dictionary with created schema metadata
+        SchemaInfo object with created schema metadata
 
     Raises:
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    payload = {
-        "name": schema_name,
-        "catalog_name": catalog_name
-    }
-    if comment:
-        payload["comment"] = comment
-
-    return client.post("/api/2.1/unity-catalog/schemas", json=payload)
+    w = WorkspaceClient()
+    return w.schemas.create(
+        name=schema_name,
+        catalog_name=catalog_name,
+        comment=comment
+    )
 
 
 def update_schema(
-    client: DatabricksClient,
     full_schema_name: str,
     new_name: Optional[str] = None,
     comment: Optional[str] = None,
     owner: Optional[str] = None
-) -> Dict[str, Any]:
+) -> SchemaInfo:
     """
     Update an existing schema in Unity Catalog.
 
     Args:
-        client: Databricks client instance
         full_schema_name: Full schema name (catalog.schema format)
         new_name: New name for the schema
         comment: New comment/description
         owner: New owner
 
     Returns:
-        Dictionary with updated schema metadata
+        SchemaInfo object with updated schema metadata
 
     Raises:
         ValueError: If no fields are provided to update
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    payload = {}
-    if new_name:
-        payload["new_name"] = new_name
-    if comment:
-        payload["comment"] = comment
-    if owner:
-        payload["owner"] = owner
-
-    if not payload:
+    if not any([new_name, comment, owner]):
         raise ValueError("At least one field (new_name, comment, or owner) must be provided")
 
-    return client.patch(f"/api/2.1/unity-catalog/schemas/{full_schema_name}", json=payload)
+    w = WorkspaceClient()
+    return w.schemas.update(
+        full_name=full_schema_name,
+        new_name=new_name,
+        comment=comment,
+        owner=owner
+    )
 
 
-def delete_schema(client: DatabricksClient, full_schema_name: str) -> None:
+def delete_schema(full_schema_name: str) -> None:
     """
     Delete a schema from Unity Catalog.
 
     Args:
-        client: Databricks client instance
         full_schema_name: Full schema name (catalog.schema format)
 
     Raises:
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    client.delete(f"/api/2.1/unity-catalog/schemas/{full_schema_name}")
+    w = WorkspaceClient()
+    w.schemas.delete(full_name=full_schema_name)

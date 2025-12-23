@@ -3,93 +3,96 @@ Spark Declarative Pipelines - Pipeline Management
 
 Functions for managing SDP pipeline lifecycle using Databricks Pipelines API.
 """
-from typing import Dict, Any, List, Optional
-from ..client import DatabricksClient
+from typing import List, Optional, Dict
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.pipelines import (
+    CreatePipelineResponse,
+    GetPipelineResponse,
+    PipelineLibrary,
+    PipelineCluster,
+    PipelineEvent,
+    GetUpdateResponse,
+    StartUpdateResponse
+)
 
 
 def create_pipeline(
-    client: DatabricksClient,
     name: str,
     storage: str,
     target: str,
-    libraries: List[Dict[str, Any]],
-    clusters: Optional[List[Dict[str, Any]]] = None,
+    libraries: List[PipelineLibrary],
+    clusters: Optional[List[PipelineCluster]] = None,
     configuration: Optional[Dict[str, str]] = None,
     continuous: bool = False,
     serverless: Optional[bool] = None
-) -> Dict[str, Any]:
+) -> CreatePipelineResponse:
     """
     Create a new Spark Declarative Pipeline.
 
     Args:
-        client: Databricks client instance
         name: Pipeline name
         storage: Storage location for pipeline data
         target: Target catalog.schema for output tables
-        libraries: List of notebook/file paths
-                   Example: [{"notebook": {"path": "/path/to/file.py"}}]
+        libraries: List of PipelineLibrary objects
+                   Example: [PipelineLibrary(notebook=NotebookLibrary(
+                                path="/path/to/file.py"))]
         clusters: Optional cluster configuration
         configuration: Optional Spark configuration key-value pairs
         continuous: If True, pipeline runs continuously
+        serverless: If True, uses serverless compute
 
     Returns:
-        Dictionary with pipeline metadata including pipeline_id
+        CreatePipelineResponse with pipeline_id
 
     Raises:
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    payload = {
-        "name": name,
-        "storage": storage,
-        "target": target,
-        "libraries": libraries,
-        "continuous": continuous
-    }
+    w = WorkspaceClient()
 
-    if clusters:
-        payload["clusters"] = clusters
-    if configuration:
-        payload["configuration"] = configuration
-    if serverless is not None:
-        payload["serverless"] = serverless
-
-    return client.post("/api/2.0/pipelines", json=payload)
+    return w.pipelines.create(
+        name=name,
+        storage=storage,
+        target=target,
+        libraries=libraries,
+        clusters=clusters,
+        configuration=configuration,
+        continuous=continuous,
+        serverless=serverless
+    )
 
 
-def get_pipeline(client: DatabricksClient, pipeline_id: str) -> Dict[str, Any]:
+def get_pipeline(pipeline_id: str) -> GetPipelineResponse:
     """
     Get pipeline details and configuration.
 
     Args:
-        client: Databricks client instance
         pipeline_id: Pipeline ID
 
     Returns:
-        Dictionary with full pipeline configuration and state
+        GetPipelineResponse with full pipeline configuration and state
 
     Raises:
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    return client.get(f"/api/2.0/pipelines/{pipeline_id}")
+    w = WorkspaceClient()
+    return w.pipelines.get(pipeline_id=pipeline_id)
 
 
 def update_pipeline(
-    client: DatabricksClient,
     pipeline_id: str,
     name: Optional[str] = None,
     storage: Optional[str] = None,
     target: Optional[str] = None,
-    libraries: Optional[List[Dict[str, Any]]] = None,
-    clusters: Optional[List[Dict[str, Any]]] = None,
+    libraries: Optional[List[PipelineLibrary]] = None,
+    clusters: Optional[List[PipelineCluster]] = None,
     configuration: Optional[Dict[str, str]] = None,
     continuous: Optional[bool] = None,
     serverless: Optional[bool] = None
-) -> Dict[str, Any]:
+) -> None:
     """
     Update pipeline configuration (not code files).
 
     Args:
-        client: Databricks client instance
         pipeline_id: Pipeline ID
         name: New pipeline name
         storage: New storage location
@@ -98,51 +101,41 @@ def update_pipeline(
         clusters: New cluster configuration
         configuration: New Spark configuration
         continuous: New continuous mode setting
-
-    Returns:
-        Dictionary with updated pipeline metadata
+        serverless: New serverless setting
 
     Raises:
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    payload = {}
+    w = WorkspaceClient()
 
-    if name is not None:
-        payload["name"] = name
-    if storage is not None:
-        payload["storage"] = storage
-    if target is not None:
-        payload["target"] = target
-    if libraries is not None:
-        payload["libraries"] = libraries
-    if clusters is not None:
-        payload["clusters"] = clusters
-    if configuration is not None:
-        payload["configuration"] = configuration
-    if continuous is not None:
-        payload["continuous"] = continuous
-    if serverless is not None:
-        payload["serverless"] = serverless
-
-    return client.put(f"/api/2.0/pipelines/{pipeline_id}", json=payload)
+    w.pipelines.update(
+        pipeline_id=pipeline_id,
+        name=name,
+        storage=storage,
+        target=target,
+        libraries=libraries,
+        clusters=clusters,
+        configuration=configuration,
+        continuous=continuous,
+        serverless=serverless
+    )
 
 
-def delete_pipeline(client: DatabricksClient, pipeline_id: str) -> None:
+def delete_pipeline(pipeline_id: str) -> None:
     """
     Delete a pipeline.
 
     Args:
-        client: Databricks client instance
         pipeline_id: Pipeline ID
 
     Raises:
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    client.delete(f"/api/2.0/pipelines/{pipeline_id}")
+    w = WorkspaceClient()
+    w.pipelines.delete(pipeline_id=pipeline_id)
 
 
 def start_update(
-    client: DatabricksClient,
     pipeline_id: str,
     refresh_selection: Optional[List[str]] = None,
     full_refresh: bool = False,
@@ -153,90 +146,90 @@ def start_update(
     Start a pipeline update or dry-run validation.
 
     Args:
-        client: Databricks client instance
         pipeline_id: Pipeline ID
         refresh_selection: List of table names to refresh
         full_refresh: If True, performs full refresh
         full_refresh_selection: List of table names for full refresh
-        validate_only: If True, performs dry-run validation without updating datasets
+        validate_only: If True, performs dry-run validation
+                      without updating datasets
 
     Returns:
         Update ID for polling status
 
     Raises:
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    payload = {
-        "full_refresh": full_refresh,
-        "validate_only": validate_only
-    }
+    w = WorkspaceClient()
 
-    if refresh_selection:
-        payload["refresh_selection"] = refresh_selection
-    if full_refresh_selection:
-        payload["full_refresh_selection"] = full_refresh_selection
+    response = w.pipelines.start_update(
+        pipeline_id=pipeline_id,
+        refresh_selection=refresh_selection,
+        full_refresh=full_refresh,
+        full_refresh_selection=full_refresh_selection,
+        validate_only=validate_only
+    )
 
-    response = client.post(f"/api/2.0/pipelines/{pipeline_id}/updates", json=payload)
-    return response["update_id"]
+    return response.update_id
 
 
-def get_update(
-    client: DatabricksClient,
-    pipeline_id: str,
-    update_id: str
-) -> Dict[str, Any]:
+def get_update(pipeline_id: str, update_id: str) -> GetUpdateResponse:
     """
     Get pipeline update status and results.
 
     Args:
-        client: Databricks client instance
         pipeline_id: Pipeline ID
         update_id: Update ID from start_update
 
     Returns:
-        Dictionary with update status (state: QUEUED, RUNNING, COMPLETED, FAILED, etc.)
+        GetUpdateResponse with update status
+        (state: QUEUED, RUNNING, COMPLETED, FAILED, etc.)
 
     Raises:
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    return client.get(f"/api/2.0/pipelines/{pipeline_id}/updates/{update_id}")
+    w = WorkspaceClient()
+    return w.pipelines.get_update(
+        pipeline_id=pipeline_id,
+        update_id=update_id
+    )
 
 
-def stop_pipeline(client: DatabricksClient, pipeline_id: str) -> None:
+def stop_pipeline(pipeline_id: str) -> None:
     """
     Stop a running pipeline.
 
     Args:
-        client: Databricks client instance
         pipeline_id: Pipeline ID
 
     Raises:
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    client.post(f"/api/2.0/pipelines/{pipeline_id}/stop", json={})
+    w = WorkspaceClient()
+    # SDK's stop() returns Wait object, but we don't need to wait
+    w.pipelines.stop(pipeline_id=pipeline_id)
 
 
 def get_pipeline_events(
-    client: DatabricksClient,
     pipeline_id: str,
     max_results: int = 100
-) -> List[Dict[str, Any]]:
+) -> List[PipelineEvent]:
     """
     Get pipeline events, issues, and error messages.
 
     Args:
-        client: Databricks client instance
         pipeline_id: Pipeline ID
         max_results: Maximum number of events to return
 
     Returns:
-        List of event dictionaries with error details
+        List of PipelineEvent objects with error details
 
     Raises:
-        requests.HTTPError: If API request fails
+        DatabricksError: If API request fails
     """
-    response = client.get(
-        f"/api/2.0/pipelines/{pipeline_id}/events",
-        params={"max_results": max_results}
+    w = WorkspaceClient()
+    # SDK returns iterator, convert to list with max_results limit
+    events = w.pipelines.list_pipeline_events(
+        pipeline_id=pipeline_id,
+        max_results=max_results
     )
-    return response.get("events", [])
+    return list(events)

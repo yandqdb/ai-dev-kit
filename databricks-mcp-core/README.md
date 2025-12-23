@@ -20,42 +20,38 @@ pip install -e .
 
 ## Usage
 
+All functions use the official `databricks-sdk` and create their own `WorkspaceClient` instances internally. Authentication is handled automatically via environment variables or Databricks configuration profiles.
+
 ```python
-from databricks_mcp_core.client import DatabricksClient
 from databricks_mcp_core.unity_catalog import catalogs, schemas, tables
+from databricks.sdk.service.catalog import ColumnInfo, TableType
 
-# Initialize client
-client = DatabricksClient(
-    host="https://your-workspace.databricks.com",
-    token="your-token"
-)
+# Set authentication (optional - defaults to standard Databricks auth)
+# export DATABRICKS_CONFIG_PROFILE=my-profile
+# or use DATABRICKS_HOST and DATABRICKS_TOKEN
 
-# Or use environment variables: DATABRICKS_HOST, DATABRICKS_TOKEN
-client = DatabricksClient()
-
-# List catalogs
-all_catalogs = catalogs.list_catalogs(client)
+# List catalogs (returns List[CatalogInfo])
+all_catalogs = catalogs.list_catalogs()
 for catalog in all_catalogs:
-    print(catalog["name"])
+    print(catalog.name)
 
-# Create a schema
+# Create a schema (returns SchemaInfo)
 schema = schemas.create_schema(
-    client,
     catalog_name="main",
     schema_name="my_schema",
     comment="Example schema"
 )
 
-# Create a table
+# Create a table (returns TableInfo)
 table = tables.create_table(
-    client,
     catalog_name="main",
     schema_name="my_schema",
     table_name="my_table",
     columns=[
-        {"name": "id", "type_name": "INT"},
-        {"name": "value", "type_name": "STRING"}
-    ]
+        ColumnInfo(name="id", type_name="INT"),
+        ColumnInfo(name="value", type_name="STRING")
+    ],
+    table_type=TableType.MANAGED
 )
 ```
 

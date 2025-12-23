@@ -11,8 +11,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
-# Match your existing client import pattern (HTTP wrapper or SDK adapter)
-from ..client import DatabricksClient
+from databricks.sdk import WorkspaceClient
 
 
 # ---------------------------
@@ -166,14 +165,15 @@ def execute_script(project_path: str,
 # ---------------------------
 # Upload to Volume
 # ---------------------------
-def upload_to_volume(client: DatabricksClient,
-                     catalog: str,
-                     schema: str,
-                     volume: str,
-                     local_data_dir: str,
-                     remote_subfolder: str = "incoming_data",
-                     clean: bool = True,
-                     max_files: Optional[int] = None) -> Dict[str, Any]:
+def upload_to_volume(
+    catalog: str,
+    schema: str,
+    volume: str,
+    local_data_dir: str,
+    remote_subfolder: str = "incoming_data",
+    clean: bool = True,
+    max_files: Optional[int] = None
+) -> Dict[str, Any]:
     """
     Upload generated parquet files to a Unity Catalog Volume.
 
@@ -181,7 +181,6 @@ def upload_to_volume(client: DatabricksClient,
       /Volumes/{catalog}/{schema}/{volume}/{remote_subfolder}/...
 
     Args:
-        client: Databricks client instance
         catalog: Unity Catalog name
         schema: Schema name
         volume: Volume name
@@ -200,20 +199,23 @@ def upload_to_volume(client: DatabricksClient,
         }
 
     Raises:
-        requests.HTTPError: If API requests fail inside DatabricksClient
+        DatabricksError: If API requests fail
         FileNotFoundError: If local_data_dir does not exist
         OSError: On local I/O errors
     """
+    w = WorkspaceClient()
     src = Path(local_data_dir)
     if not src.exists():
         raise FileNotFoundError(f"No local data directory: {src}")
 
     remote_base = f"/Volumes/{catalog}/{schema}/{volume}/{remote_subfolder}"
 
-    # Clean remote folder if requested (requires corresponding client helpers)
+    # Clean remote folder if requested
     if clean:
-        client.files.delete_directory(remote_base, ignore_missing=True)
-        client.files.create_directory(remote_base)
+        try:
+            w.files.delete(remote_base)
+        except Exception:
+            pass  # Ignore if doesn't exist
 
     uploaded_paths: List[str] = []
     errors: List[str] = []
@@ -230,13 +232,14 @@ def upload_to_volume(client: DatabricksClient,
             local_file = Path(root) / fname
             rel_path = os.path.relpath(local_file, src).replace("\\", "/")
             remote_path = f"{remote_base}/{rel_path}"
-            remote_dir = str(Path(remote_path).parent).replace("\\", "/")
 
             try:
-                client.files.create_directory(remote_dir)
                 with open(local_file, "rb") as f:
-                    data = f.read()
-                client.files.upload(remote_path, data=data, overwrite=True)
+                    w.files.upload(
+                        file_path=remote_path,
+                        contents=f,
+                        overwrite=True
+                    )
                 uploaded_paths.append(remote_path)
                 files_seen += 1
             except Exception as e:
@@ -254,21 +257,21 @@ def upload_to_volume(client: DatabricksClient,
 # ---------------------------
 # Orchestration
 # ---------------------------
-def generate_and_upload(client: DatabricksClient,
-                        project_path: str,
-                        catalog: str,
-                        schema: str,
-                        volume: str,
-                        scale_factor: float = 1.0,
-                        remote_subfolder: str = "incoming_data",
-                        clean: bool = True,
-                        python_bin: Optional[str] = None,
-                        timeout_sec: int = 300) -> Dict[str, Any]:
+def generate_and_upload(
+    project_path: str,
+    catalog: str,
+    schema: str,
+    volume: str,
+    scale_factor: float = 1.0,
+    remote_subfolder: str = "incoming_data",
+    clean: bool = True,
+    python_bin: Optional[str] = None,
+    timeout_sec: int = 300
+) -> Dict[str, Any]:
     """
-    One-shot orchestration: execute local generate_data.py then upload parquet to a volume.
+    One-shot orchestration: execute local generate_data.py then upload.
 
     Args:
-        client: Databricks client instance
         project_path: Project directory containing generate_data.py
         catalog: Unity Catalog name
         schema: Schema name
@@ -299,7 +302,6 @@ def generate_and_upload(client: DatabricksClient,
 
     data_dir = str(Path(project_path) / "data")
     upl = upload_to_volume(
-        client=client,
         catalog=catalog,
         schema=schema,
         volume=volume,
@@ -314,7 +316,6 @@ def generate_and_upload(client: DatabricksClient,
 # Cluster-Based Execution
 # ---------------------------
 def execute_script_on_cluster(
-    client: DatabricksClient,
     cluster_id: str,
     workspace_path: str,
     volume_output_path: str,
@@ -322,13 +323,12 @@ def execute_script_on_cluster(
     timeout_sec: int = 600
 ) -> Dict[str, Any]:
     """
-    Execute generate_data.py on Databricks cluster, writing directly to Volume.
+    Execute generate_data.py on Databricks cluster, writing to Volume.
 
     Args:
-        client: Databricks client instance
         cluster_id: Databricks cluster ID
-        workspace_path: Workspace path to generate_data.py (e.g., "/Workspace/Users/user@example.com/generate_data.py")
-        volume_output_path: Volume path for output (e.g., "/Volumes/catalog/schema/volume/incoming_data")
+        workspace_path: Workspace path to generate_data.py
+        volume_output_path: Volume path for output
         scale_factor: Sets SCALE_FACTOR env var for the script
         timeout_sec: Execution timeout in seconds
 
@@ -341,13 +341,13 @@ def execute_script_on_cluster(
         }
 
     Raises:
-        Exceptions from compute execution or workspace file operations
+        DatabricksError: If API requests fail
     """
     from ..compute import execution
     from ..spark_declarative_pipelines import workspace_files
 
     # Read script from workspace
-    script_code = workspace_files.read_file(client, workspace_path)
+    script_code = workspace_files.read_file(workspace_path)
 
     # Wrap to set environment variables and execute
     wrapped_code = f"""
@@ -360,18 +360,21 @@ os.environ['OUTPUT_PATH'] = '{volume_output_path}'
 
     # Execute on cluster
     result = execution.execute_databricks_command(
-        client=client,
         cluster_id=cluster_id,
         language="python",
         code=wrapped_code,
-        timeout_sec=timeout_sec
+        timeout=timeout_sec
     )
 
-    return result
+    return {
+        "success": result.success,
+        "output": result.output,
+        "error": result.error,
+        "duration_sec": 0.0  # SDK doesn't return duration
+    }
 
 
 def generate_and_upload_on_cluster(
-    client: DatabricksClient,
     cluster_id: str,
     workspace_path: str,
     catalog: str,
@@ -383,17 +386,16 @@ def generate_and_upload_on_cluster(
     timeout_sec: int = 600
 ) -> Dict[str, Any]:
     """
-    One-shot orchestration: execute generate_data.py on cluster and write directly to Volume.
+    One-shot orchestration: execute generate_data.py on cluster to Volume.
 
     Args:
-        client: Databricks client instance
         cluster_id: Databricks cluster ID
         workspace_path: Workspace path to generate_data.py
         catalog: Unity Catalog name
         schema: Schema name
         volume: Volume name
         scale_factor: Sets SCALE_FACTOR for generation run
-        remote_subfolder: Base folder under the volume (e.g., 'incoming_data')
+        remote_subfolder: Base folder under the volume
         clean: If True, remote_subfolder is cleaned before execution
         timeout_sec: Execution timeout
 
@@ -407,27 +409,21 @@ def generate_and_upload_on_cluster(
         }
 
     Raises:
-        Exceptions from cluster execution or Files API operations
+        DatabricksError: If API requests fail
     """
+    w = WorkspaceClient()
     volume_path = f"/Volumes/{catalog}/{schema}/{volume}/{remote_subfolder}"
 
     # Clean if requested
     if clean:
         try:
-            client.files.delete_directory(volume_path, ignore_missing=True)
-            client.files.create_directory(volume_path)
-        except Exception as e:
-            return {
-                "success": False,
-                "output": "",
-                "volume_path": volume_path,
-                "error": f"Failed to clean volume path: {str(e)}",
-                "duration_sec": 0.0
-            }
+            w.files.delete(volume_path)
+        except Exception:
+            pass  # Ignore if doesn't exist
 
     # Execute on cluster
     result = execute_script_on_cluster(
-        client, cluster_id, workspace_path, volume_path, scale_factor, timeout_sec
+        cluster_id, workspace_path, volume_path, scale_factor, timeout_sec
     )
     result["volume_path"] = volume_path
     return result

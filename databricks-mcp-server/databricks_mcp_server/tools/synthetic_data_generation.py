@@ -7,30 +7,17 @@ import os
 import sys
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../databricks-mcp-core"))
+sys.path.insert(  # noqa: E402
+    0, os.path.join(os.path.dirname(__file__), "../../../databricks-mcp-core")
+)
 
-from databricks_mcp_core.client import DatabricksClient
-from databricks_mcp_core.synthetic_data_generation import (
+from databricks_mcp_core.synthetic_data_generation import (  # noqa: E402
     get_template,
     generate_and_upload_on_cluster
 )
-from databricks_mcp_core.spark_declarative_pipelines import workspace_files
-
-
-# Lazy client initialization
-_client = None
-
-def get_client():
-    """
-    Get or create Databricks client.
-
-    Uses DATABRICKS_CONFIG_PROFILE env var if set, otherwise falls back to
-    DATABRICKS_HOST/DATABRICKS_TOKEN env vars.
-    """
-    global _client
-    if _client is None:
-        _client = DatabricksClient()
-    return _client
+from databricks_mcp_core.spark_declarative_pipelines import (  # noqa: E402
+    workspace_files
+)
 
 
 def get_synth_data_template_tool(arguments: dict) -> dict:
@@ -40,12 +27,15 @@ def get_synth_data_template_tool(arguments: dict) -> dict:
             template_type=arguments.get("template_type", "story"),
             template_root=arguments.get("template_root")
         )
+        template_type = arguments.get('template_type', 'story')
         return {
             "content": [{
                 "type": "text",
-                "text": f"📄 Template: {arguments.get('template_type', 'story')}\n\n"
-                       f"```python\n{result['code']}\n```\n\n"
-                       f"Source: {result['source_path']}"
+                "text": (
+                    f"📄 Template: {template_type}\n\n"
+                    f"```python\n{result['code']}\n```\n\n"
+                    f"Source: {result['source_path']}"
+                )
             }]
         }
     except Exception as e:
@@ -58,19 +48,22 @@ def get_synth_data_template_tool(arguments: dict) -> dict:
 def write_synth_data_script_to_workspace_tool(arguments: dict) -> dict:
     """MCP tool: Write generate_data.py script to Databricks workspace"""
     try:
-        client = get_client()
         workspace_files.write_file(
-            client,
             arguments["workspace_path"],
             arguments["code"],
             language="PYTHON",
             overwrite=arguments.get("overwrite", True)
         )
+        workspace_path = arguments['workspace_path']
+        overwrite = arguments.get('overwrite', True)
         return {
             "content": [{
                 "type": "text",
-                "text": f"✅ Script written to workspace\n\nPath: {arguments['workspace_path']}\n"
-                       f"Overwrite: {arguments.get('overwrite', True)}"
+                "text": (
+                    "✅ Script written to workspace\n\n"
+                    f"Path: {workspace_path}\n"
+                    f"Overwrite: {overwrite}"
+                )
             }]
         }
     except Exception as e:
@@ -83,9 +76,7 @@ def write_synth_data_script_to_workspace_tool(arguments: dict) -> dict:
 def generate_and_upload_synth_data_tool(arguments: dict) -> dict:
     """MCP tool: Execute generate_data.py on cluster and write to Volume"""
     try:
-        client = get_client()
         result = generate_and_upload_on_cluster(
-            client,
             arguments["cluster_id"],
             arguments["workspace_path"],
             arguments["catalog"],
@@ -98,15 +89,23 @@ def generate_and_upload_synth_data_tool(arguments: dict) -> dict:
         )
 
         status = "✅" if result["success"] else "❌"
-        text = f"{status} Synthetic Data Generation\n\n"
-        text += f"Cluster: {arguments['cluster_id']}\n"
-        text += f"Volume: {result['volume_path']}\n"
-        text += f"Duration: {result['duration_sec']:.2f}s\n\n"
+        cluster_id = arguments['cluster_id']
+        volume_path = result['volume_path']
+        duration = result['duration_sec']
+
+        text = (
+            f"{status} Synthetic Data Generation\n\n"
+            f"Cluster: {cluster_id}\n"
+            f"Volume: {volume_path}\n"
+            f"Duration: {duration:.2f}s\n\n"
+        )
 
         if result.get("error"):
-            text += f"❌ Error: {result['error']}\n\n"
+            error = result['error']
+            text += f"❌ Error: {error}\n\n"
 
-        text += f"Output:\n{result['output']}"
+        output = result['output']
+        text += f"Output:\n{output}"
 
         return {
             "content": [{"type": "text", "text": text}],
