@@ -273,6 +273,8 @@ cd databricks-claude-test-project
 ./setup.sh   # Requires databricks-mcp-server setup first
 claude
 ```
+## Acknowledgments
+MCP Databricks Command Execution API from [databricks-exec-code](https://github.com/databricks-solutions/databricks-exec-code-mcp) by Natyra Bajraktari and Henryk Borzymowski.
 
 ## License
 
