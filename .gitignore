@@ -55,7 +55,11 @@ htmlcov/
 
 # MCP Server logs
 *.log
-mcp.json
+*.mcp.json
+ai-dev-project/.mcp.json
 
 # Generated test files
 databricks-tools-core/tests/integration/pdf/generated_pdf/
+
+# claude
+.claude/
