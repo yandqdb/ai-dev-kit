@@ -9,6 +9,12 @@ arguments: "[skill-name] [subcommand]"
 
 Offline YAML-first evaluation with human-in-the-loop review and interactive skill improvement.
 
+## Quick References
+
+- [Scorers](references/scorers.md) - Available scorers and quality gates
+- [YAML Schemas](references/yaml-schemas.md) - Manifest and ground truth formats
+- [Python API](references/python-api.md) - Programmatic usage examples
+
 ## /skill-test Command
 
 The `/skill-test` command provides an interactive CLI for testing Databricks skills with real execution on Databricks.
@@ -27,6 +33,8 @@ The `/skill-test` command provides an interactive CLI for testing Databricks ski
 | `regression` | Compare current results against baseline |
 | `init` | Initialize test scaffolding for a new skill |
 | `add` | Interactive: prompt -> invoke skill -> test -> save |
+| `review` | Review pending candidates interactively |
+| `review --batch` | Batch approve all pending candidates |
 | `baseline` | Save current results as regression baseline |
 | `mlflow` | Run full MLflow evaluation with LLM judges |
 | `scorers` | List configured scorers for a skill |
@@ -43,6 +51,8 @@ The `/skill-test` command provides an interactive CLI for testing Databricks ski
 /skill-test spark-declarative-pipelines mlflow
 /skill-test spark-declarative-pipelines scorers
 /skill-test spark-declarative-pipelines scorers update --add-guideline "Must use CLUSTER BY"
+/skill-test spark-declarative-pipelines review
+/skill-test spark-declarative-pipelines review --batch --filter-success
 /skill-test my-new-skill init
 ```
 
@@ -50,45 +60,39 @@ The `/skill-test` command provides an interactive CLI for testing Databricks ski
 
 ### Environment Setup
 
-The scripts connect to Databricks MLflow via environment variables:
+```bash
+uv pip install -e .test/
+```
+
+Environment variables for Databricks MLflow:
 - `DATABRICKS_CONFIG_PROFILE` - Databricks CLI profile (default: "DEFAULT")
 - `MLFLOW_TRACKING_URI` - Set to "databricks" for Databricks MLflow
 - `MLFLOW_EXPERIMENT_NAME` - Experiment path (e.g., "/Users/{user}/skill-test")
 
-Ensure dependencies are installed:
-```bash
-uv pip install -e ".test/"
-```
+### Running Scripts
 
-### For `mlflow` subcommand
+All subcommands have corresponding scripts in `.test/scripts/`:
 
 ```bash
-uv run python .claude/skills/skill-test/scripts/mlflow_eval.py {skill_name}
+uv run python .test/scripts/{subcommand}.py {skill_name} [options]
 ```
 
-### For `run` subcommand
+| Subcommand | Script | Example |
+|------------|--------|---------|
+| `run` | `run_eval.py` | `uv run python .test/scripts/run_eval.py my-skill` |
+| `regression` | `regression.py` | `uv run python .test/scripts/regression.py my-skill` |
+| `init` | `init_skill.py` | `uv run python .test/scripts/init_skill.py my-skill` |
+| `add` | `add.py` | `uv run python .test/scripts/add.py my-skill --prompt "..."` |
+| `review` | `review.py` | `uv run python .test/scripts/review.py my-skill` |
+| `review --batch` | `review.py` | `uv run python .test/scripts/review.py my-skill --batch --filter-success` |
+| `baseline` | `baseline.py` | `uv run python .test/scripts/baseline.py my-skill` |
+| `mlflow` | `mlflow_eval.py` | `uv run python .test/scripts/mlflow_eval.py my-skill` |
+| `scorers` | `scorers.py` | `uv run python .test/scripts/scorers.py my-skill` |
+| `scorers update` | `scorers_update.py` | `uv run python .test/scripts/scorers_update.py my-skill --add-guideline "..."` |
+| `sync` | `sync.py` | `uv run python .test/scripts/sync.py my-skill` |
+| `_routing mlflow` | `routing_eval.py` | `uv run python .test/scripts/routing_eval.py` |
 
-```bash
-uv run python .claude/skills/skill-test/scripts/run_eval.py {skill_name}
-```
-
-### For `baseline` subcommand
-
-```bash
-uv run python .claude/skills/skill-test/scripts/baseline.py {skill_name}
-```
-
-### For `regression` subcommand
-
-```bash
-uv run python .claude/skills/skill-test/scripts/regression.py {skill_name}
-```
-
-### For `init` subcommand
-
-```bash
-uv run python .claude/skills/skill-test/scripts/init_skill.py {skill_name}
-```
+Use `--help` on any script for available options.
 
 ## Command Handler
 
@@ -106,6 +110,7 @@ When `/skill-test` is invoked, parse arguments and execute the appropriate comma
 | `regression` | Execute `regression(skill_name, ctx)` and display comparison |
 | `init` | Execute `init(skill_name, ctx)` to create scaffolding |
 | `add` | Prompt for test input, invoke skill, run `interactive()` |
+| `review` | Execute `review(skill_name, ctx)` to review pending candidates |
 | `baseline` | Execute `baseline(skill_name, ctx)` to save as regression baseline |
 | `mlflow` | Execute `mlflow_eval(skill_name, ctx)` with MLflow logging |
 | `scorers` | Execute `scorers(skill_name, ctx)` to list configured scorers |
@@ -113,19 +118,7 @@ When `/skill-test` is invoked, parse arguments and execute the appropriate comma
 
 ### Context Setup
 
-Always create CLIContext with MCP tools before calling any command:
-
-```python
-from skill_test.cli import CLIContext, run, regression, init, baseline, mlflow_eval, interactive
-
-ctx = CLIContext(
-    mcp_execute_command=mcp__databricks__execute_databricks_command,
-    mcp_execute_sql=mcp__databricks__execute_sql,
-    mcp_upload_file=mcp__databricks__upload_file,
-    mcp_get_best_warehouse=mcp__databricks__get_best_warehouse,
-    mcp_get_best_cluster=mcp__databricks__get_best_cluster,
-)
-```
+Create CLIContext with MCP tools before calling any command. See [Python API](references/python-api.md#clicontext-setup) for details.
 
 ## Example Workflows
 
@@ -181,35 +174,101 @@ Claude: [Displays evaluation metrics and MLflow run link]
 ```
 User: /skill-test spark-declarative-pipelines scorers
 
-Claude: [Calls scorers("spark-declarative-pipelines", ctx)]
 Claude: [Shows enabled scorers, LLM scorers, and default guidelines]
-
-Scorer Configuration for spark-declarative-pipelines:
-
-Enabled (Deterministic):
-  - python_syntax
-  - sql_syntax
-  - pattern_adherence
-  - no_hallucinated_apis
-
-LLM Scorers:
-  - Safety
-  - guidelines_from_expectations
-
-Default Guidelines:
-  - Response must address the user's request completely
-  - Code examples must follow documented best practices
 ```
 
 ```
-User: /skill-test spark-declarative-pipelines scorers update --add-guideline "Must include CLUSTER BY for large tables"
+User: /skill-test spark-declarative-pipelines scorers update --add-guideline "Must include CLUSTER BY"
 
-Claude: [Calls scorers_update("spark-declarative-pipelines", ctx, add_guidelines=[...])]
 Claude: [Updates manifest.yaml with new guideline]
-
-Updated scorer configuration:
-  Changes: Added guideline: Must include CLUSTER BY for large tables...
 ```
+
+### Reviewing Candidates
+```
+User: /skill-test spark-declarative-pipelines review
+
+Claude: [Opens interactive review for pending candidates]
+Claude: [For each candidate, shows prompt, response, execution results, and diagnosis]
+Claude: [User selects: [a]pprove, [r]eject, [s]kip, or [e]dit]
+Claude: [Approved candidates are promoted to ground_truth.yaml]
+```
+
+```
+User: /skill-test spark-declarative-pipelines review --batch --filter-success
+
+Claude: [Batch approves all candidates with execution_success=True]
+Claude: [Reports: "Batch approved 5 candidates, promoted 5 to ground_truth.yaml"]
+```
+
+## Review Workflow
+
+When test cases fail during `/skill-test add`, they are saved to `candidates.yaml` for review. The review workflow allows you to examine failures, understand issues, and decide what to do with each candidate.
+
+### Diagnosis Output
+
+When a test fails, the system generates diagnosis information:
+
+```yaml
+diagnosis:
+  error: "AnalysisException: Table or view not found: bronze_orders"
+  code_block: "SELECT * FROM bronze_orders"
+  suggested_action: "ensure_table_exists"
+  relevant_sections:
+    - file: "SKILL.md"
+      section: "## Table Creation"
+      line: 142
+      excerpt: "Create streaming tables before querying..."
+```
+
+### Interactive Review Options
+
+When reviewing interactively, you have four options for each candidate:
+
+| Option | Key | Action |
+|--------|-----|--------|
+| **Approve** | `a` | Mark as approved, will be promoted to ground_truth.yaml |
+| **Reject** | `r` | Discard the candidate (with required reason) |
+| **Skip** | `s` | Keep as pending for later review |
+| **Edit** | `e` | Modify expectations before approving |
+
+### Candidate Lifecycle
+
+```
+[add] --> candidates.yaml (status: pending)
+                |
+         [review]
+                |
+      +----+----+----+
+      |    |    |    |
+   approve reject skip edit
+      |    |    |    |
+      v    v    |    v
+ (approved) (removed) (pending) (approved+edited)
+      |              |    |
+      +--------------+----+
+                |
+         [promote]
+                |
+                v
+        ground_truth.yaml
+```
+
+### Batch Approval
+
+For CI/automation, use batch mode to approve candidates programmatically:
+
+```bash
+# Approve all pending candidates
+uv run python .test/scripts/review.py my-skill --batch
+
+# Only approve candidates that executed successfully
+uv run python .test/scripts/review.py my-skill --batch --filter-success
+```
+
+Batch approval is useful for:
+- Automated pipelines where human review isn't practical
+- Bulk-approving candidates that passed execution validation
+- Seeding initial ground truth from successful test runs
 
 ## Interactive Workflow
 
@@ -231,197 +290,6 @@ When running `/skill-test <skill-name>`, the framework follows this workflow:
 6. **Cleanup Phase** (if configured):
    - Teardown test infrastructure
 7. **Report Phase**: Display execution summary
-
-### Execution Modes
-
-| Mode | Description |
-|------|-------------|
-| **databricks** (default) | Execute on Databricks serverless compute |
-| **local** | Syntax validation only (fallback when Databricks unavailable) |
-| **dry_run** | Parse and validate without execution |
-
-**Serverless is the default.** The framework only uses a cluster if explicitly specified.
-
-## Python API
-
-### Skill Evaluation
-
-```python
-from skill_test.runners import evaluate_skill
-results = evaluate_skill("spark-declarative-pipelines")
-# Loads .test/skills/{skill}/ground_truth.yaml, runs scorers, reports to MLflow
-```
-
-### Routing Evaluation
-
-```python
-from skill_test.runners import evaluate_routing
-results = evaluate_routing()
-# Tests skill trigger detection from .test/skills/_routing/ground_truth.yaml
-```
-
-### Generate-Review-Promote Pipeline
-
-```python
-from skill_test.grp import generate_candidate, save_candidates, promote_approved
-from skill_test.grp.reviewer import review_candidates_file
-from pathlib import Path
-
-# 1. Generate candidate from skill output
-candidate = generate_candidate("spark-declarative-pipelines", prompt, response)
-
-# 2. Save for review
-save_candidates([candidate], Path(".test/skills/spark-declarative-pipelines/candidates.yaml"))
-
-# 3. Interactive review
-review_candidates_file(Path(".test/skills/spark-declarative-pipelines/candidates.yaml"))
-
-# 4. Promote approved to ground truth
-promote_approved(
-    Path(".test/skills/spark-declarative-pipelines/candidates.yaml"),
-    Path(".test/skills/spark-declarative-pipelines/ground_truth.yaml")
-)
-```
-
-### Interactive CLI Functions
-
-```python
-from skill_test.cli import CLIContext, interactive, run, regression, init
-
-# Create context with MCP tools (injected by skill handler)
-ctx = CLIContext(
-    mcp_execute_command=mcp__databricks__execute_databricks_command,
-    mcp_execute_sql=mcp__databricks__execute_sql,
-    mcp_upload_file=mcp__databricks__upload_file,
-    mcp_get_best_warehouse=mcp__databricks__get_best_warehouse,
-)
-
-# Interactive test generation
-result = interactive(
-    skill_name="spark-declarative-pipelines",
-    prompt="Create a bronze ingestion pipeline",
-    response=skill_response,
-    ctx=ctx,
-    auto_approve_on_success=True
-)
-
-# Run evaluation
-results = run("spark-declarative-pipelines", ctx)
-
-# Check for regressions
-comparison = regression("spark-declarative-pipelines", ctx)
-```
-
-### Databricks Execution Functions
-
-```python
-from skill_test.grp.executor import (
-    DatabricksExecutionConfig,
-    execute_python_on_databricks,
-    execute_sql_on_databricks,
-    execute_code_blocks_on_databricks,
-)
-
-# Configure execution (serverless by default)
-config = DatabricksExecutionConfig(
-    use_serverless=True,  # Default
-    catalog="main",
-    schema="skill_test",
-    timeout=120
-)
-
-# Execute SQL on Databricks
-result = execute_sql_on_databricks(
-    "SELECT * FROM my_table",
-    config,
-    mcp_execute_sql,
-    mcp_get_best_warehouse
-)
-
-# Execute all code blocks in a response
-result = execute_code_blocks_on_databricks(
-    response,
-    config,
-    mcp_execute_command,
-    mcp_execute_sql,
-    mcp_get_best_warehouse
-)
-```
-
-### Test Fixtures
-
-```python
-from skill_test.fixtures import TestFixtureConfig, setup_fixtures, teardown_fixtures
-
-# Define fixtures
-config = TestFixtureConfig(
-    catalog="skill_test",
-    schema="sdp_tests",
-    volume="test_data",
-    files=[
-        FileMapping("fixtures/sample.json", "raw/sample.json")
-    ],
-    tables=[
-        TableDefinition("source_events", "CREATE TABLE IF NOT EXISTS ...")
-    ],
-    cleanup_after=True
-)
-
-# Set up fixtures
-result = setup_fixtures(config, mcp_execute_sql, mcp_upload_file, mcp_get_best_warehouse)
-
-# Tear down when done
-teardown_fixtures(config, mcp_execute_sql, mcp_get_best_warehouse)
-```
-
-## Quality Gates
-
-| Metric | Threshold |
-|--------|-----------|
-| syntax_valid/mean | 100% |
-| pattern_adherence/mean | 90% |
-| no_hallucinated_apis/mean | 100% |
-| execution_success/mean | 80% |
-| routing_accuracy/mean | 90% |
-
-## Test Case Format
-
-```yaml
-test_cases:
-  - id: "sdp_bronze_001"
-    fixtures:  # Optional: Define test infrastructure
-      catalog: "skill_test"
-      schema: "sdp_tests"
-      volume: "test_data"
-      files:
-        - local_path: "fixtures/sample_data.json"
-          volume_path: "raw/sample_data.json"
-      tables:
-        - name: "source_events"
-          ddl: "CREATE TABLE IF NOT EXISTS ..."
-      cleanup_after: true
-    inputs:
-      prompt: "Create a bronze ingestion pipeline"
-    outputs:
-      response: |
-        ```sql
-        CREATE OR REFRESH STREAMING TABLE...
-        ```
-      execution_success: true
-    expectations:
-      expected_facts:
-        - "STREAMING TABLE"
-      expected_patterns:
-        - pattern: "CREATE OR REFRESH"
-          min_count: 1
-      guidelines:
-        - "Must use modern SDP syntax"
-    metadata:
-      category: "happy_path"
-      execution_verified:
-        mode: "databricks"
-        verified_date: "2026-01-26"
-```
 
 ## File Locations
 
@@ -454,27 +322,23 @@ For example, to test `spark-declarative-pipelines` in this repository:
 ├── SKILL.md                    # Source of truth (synced to .claude/skills/)
 ├── install_skill_test.sh       # Sync script
 ├── scripts/                    # Wrapper scripts
-│   ├── mlflow_eval.py
+│   ├── _common.py              # Shared utilities
 │   ├── run_eval.py
-│   ├── baseline.py
 │   ├── regression.py
-│   └── init_skill.py
+│   ├── init_skill.py
+│   ├── add.py
+│   ├── baseline.py
+│   ├── mlflow_eval.py
+│   ├── routing_eval.py
+│   ├── scorers.py
+│   ├── scorers_update.py
+│   └── sync.py
 ├── src/
 │   └── skill_test/             # Python package
-│       ├── __init__.py
-│       ├── config.py           # Configuration
-│       ├── dataset.py          # YAML/UC data loading
 │       ├── cli/                # CLI commands module
-│       │   ├── __init__.py     # main() entry point
-│       │   └── commands.py     # run, regression, init, interactive
 │       ├── fixtures/           # Test fixture setup
-│       │   ├── __init__.py
-│       │   └── setup.py        # Catalog/schema/volume/table setup
 │       ├── scorers/            # Evaluation scorers
 │       ├── grp/                # Generate-Review-Promote pipeline
-│       │   ├── executor.py     # Local + Databricks execution
-│       │   ├── pipeline.py     # GRP workflow
-│       │   └── diagnosis.py    # Failure analysis
 │       └── runners/            # Evaluation runners
 ├── skills/                     # Per-skill test definitions
 │   ├── _routing/               # Routing test cases
@@ -489,5 +353,6 @@ For example, to test `spark-declarative-pipelines` in this repository:
 
 ## References
 
+- [Scorers](references/scorers.md) - Available scorers and quality gates
 - [YAML Schemas](references/yaml-schemas.md) - Manifest and ground truth formats
-- [Scorers](references/scorers.md) - Available evaluation scorers
+- [Python API](references/python-api.md) - Programmatic usage examples

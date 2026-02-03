@@ -93,6 +93,23 @@ Shows enabled scorers, LLM scorers, and default guidelines for the skill.
 
 Modifies the manifest.yaml to add/remove scorers or update guidelines.
 
+### 8. Review Pending Candidates
+
+```
+/skill-test spark-declarative-pipelines review
+```
+
+Claude will:
+1. Load pending test cases from `candidates.yaml`
+2. Present each candidate with prompt, response, and execution results
+3. Allow you to approve, reject, skip, or edit each candidate
+4. Auto-promote approved candidates to `ground_truth.yaml`
+
+For batch approval (useful in CI):
+```
+/skill-test spark-declarative-pipelines review --batch --filter-success
+```
+
 ## Test a New Skill
 
 ```
@@ -141,6 +158,7 @@ test_cases:
 │   ├── run_eval.py
 │   ├── baseline.py
 │   ├── regression.py
+│   ├── review.py
 │   └── init_skill.py
 ├── src/skill_test/               # Python package
 │   ├── cli/                      # CLI commands
@@ -182,6 +200,8 @@ After running `install_skill_test.sh`:
 |---------|-------------|
 | `run` | Execute tests against ground truth (default) |
 | `add` | Interactively add a new test case |
+| `review` | Review pending candidates interactively |
+| `review --batch` | Batch approve all pending candidates |
 | `baseline` | Save current results as regression baseline |
 | `regression` | Compare against baseline |
 | `mlflow` | Run MLflow evaluation with LLM judges |
@@ -251,6 +271,19 @@ Interactive workflow:
 4. Auto-saves passing tests to `ground_truth.yaml`
 5. Saves failing tests to `candidates.yaml` for GRP review
 
+#### `review`
+```
+/skill-test spark-declarative-pipelines review
+/skill-test spark-declarative-pipelines review --batch
+/skill-test spark-declarative-pipelines review --batch --filter-success
+```
+Reviews pending candidates from `candidates.yaml`:
+- **Interactive mode** (default): Shows each candidate with prompt, response, execution results, and diagnosis. Select action: approve (a), reject (r), skip (s), or edit (e).
+- **Batch mode** (`--batch`): Automatically approves all pending candidates without prompts.
+- **Filtered batch** (`--batch --filter-success`): Only approves candidates with `execution_success=True`.
+
+Approved candidates are automatically promoted to `ground_truth.yaml`.
+
 #### `init`
 ```
 /skill-test my-new-skill init
@@ -296,3 +329,121 @@ To see what would be synced without making changes:
 ```bash
 .test/install_skill_test.sh --dry-run
 ```
+
+## Trace Capture & Evaluation
+
+Capture Claude Code session traces and evaluate them against skill expectations.
+
+### Step 1: Configure Environment
+
+Add to your `.env` or shell profile:
+
+```bash
+export DATABRICKS_CONFIG_PROFILE=aws-apps   # Your Databricks CLI profile
+export MLFLOW_EXPERIMENT_NAME="/Users/<your-email>/Claude Code Skill Traces"
+```
+
+### Step 2: Enable MLflow Trace Capture (Optional)
+
+To automatically upload traces to MLflow for team sharing:
+
+```bash
+pip install mlflow[databricks]
+mlflow autolog claude -u databricks -n "$MLFLOW_EXPERIMENT_NAME" .
+```
+
+This configures hooks that capture Claude Code sessions and upload them to Databricks MLflow.
+
+### Step 3: Run Claude Code Sessions
+
+Run Claude Code normally. Traces are automatically saved:
+
+| Location | Path |
+|----------|------|
+| Local | `~/.claude/projects/{project-hash}/{session-id}.jsonl` |
+| MLflow | Your configured experiment (if autolog enabled) |
+
+### Step 4: List Available Traces
+
+**From MLflow:**
+```bash
+skill-test _ list-traces --experiment "$MLFLOW_EXPERIMENT_NAME" --limit 5
+```
+
+**Local traces:**
+```bash
+ls ~/.claude/projects/-Users-*-Documents-GitHub-ai-dev-kit/*.jsonl
+```
+
+### Step 5: Evaluate Traces
+
+**Evaluate a local trace file:**
+```bash
+skill-test spark-declarative-pipelines trace-eval \
+  --trace ~/.claude/projects/.../session-id.jsonl
+```
+
+**Evaluate from MLflow run:**
+```bash
+skill-test spark-declarative-pipelines trace-eval --run-id <run_id>
+```
+
+**Via Claude Code slash command:**
+```
+/skill-test spark-declarative-pipelines trace-eval --run-id abc123
+/skill-test spark-declarative-pipelines trace-eval --trace ~/.claude/projects/.../session.jsonl
+```
+
+### Step 6: Configure Trace Expectations
+
+Add `trace_expectations` to your skill's `manifest.yaml`:
+
+```yaml
+scorers:
+  trace_expectations:
+    tool_limits:
+      Bash: 15                           # Max bash commands
+      mcp__databricks__execute_sql: 10   # Max SQL executions
+    token_budget:
+      max_total: 150000                  # Max tokens per session
+    required_tools:
+      - Read                             # Must read files before editing
+    banned_tools:
+      - "DROP DATABASE"
+      - "rm -rf /"
+```
+
+### Example Output
+
+```json
+{
+  "success": true,
+  "traces_evaluated": 1,
+  "traces_passed": 1,
+  "results": [
+    {
+      "source": "session.jsonl",
+      "metrics_summary": {
+        "total_tokens": 45231,
+        "total_tool_calls": 25,
+        "num_turns": 15
+      },
+      "scorer_results": [
+        {"name": "tool_count", "value": "yes", "rationale": "All tools within limits"},
+        {"name": "token_budget", "value": "yes", "rationale": "45,231 < 150,000"},
+        {"name": "required_tools", "value": "yes", "rationale": "All required tools used"},
+        {"name": "banned_tools", "value": "yes", "rationale": "No banned tools detected"}
+      ],
+      "violations": []
+    }
+  ]
+}
+```
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| "401 Unauthorized" | Ensure `DATABRICKS_CONFIG_PROFILE` is set and valid |
+| "Experiment not found" | Check `MLFLOW_EXPERIMENT_NAME` path is correct |
+| "No trace artifact" | The run may not have a trace - use local JSONL instead |
