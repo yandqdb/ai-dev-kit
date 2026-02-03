@@ -16,10 +16,10 @@ jobs:
           version: "latest"
       
       - name: Run ruff check
-        run: uv run ruff check databricks-tools-core/ databricks-mcp-server/ .test/src/
+        run: uvx ruff check databricks-tools-core/ databricks-mcp-server/ .test/src/
       
       - name: Check formatting
-        run: uv run ruff format --check databricks-tools-core/ databricks-mcp-server/ .test/src/
+        run: uvx ruff format --check databricks-tools-core/ databricks-mcp-server/ .test/src/
 
   validate-skills:
     name: Validate Skills
