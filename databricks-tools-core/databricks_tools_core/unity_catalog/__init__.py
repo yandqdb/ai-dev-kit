@@ -40,6 +40,20 @@ from .volumes import (
     delete_volume,
 )
 
+# Volume Files
+from .volume_files import (
+    VolumeFileInfo,
+    VolumeUploadResult,
+    VolumeDownloadResult,
+    list_volume_files,
+    upload_to_volume,
+    download_from_volume,
+    delete_volume_file,
+    delete_volume_directory,
+    create_volume_directory,
+    get_volume_file_metadata,
+)
+
 # Functions
 from .functions_uc import (
     list_functions,
@@ -136,6 +150,11 @@ __all__ = [
     "list_tables", "get_table", "create_table", "delete_table",
     # Volumes
     "list_volumes", "get_volume", "create_volume", "update_volume", "delete_volume",
+    # Volume Files
+    "VolumeFileInfo", "VolumeUploadResult", "VolumeDownloadResult",
+    "list_volume_files", "upload_to_volume", "download_from_volume",
+    "delete_volume_file", "delete_volume_directory", "create_volume_directory",
+    "get_volume_file_metadata",
     # Functions
     "list_functions", "get_function", "delete_function",
     # Grants
