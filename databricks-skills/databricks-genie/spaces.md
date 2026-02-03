@@ -1,6 +1,6 @@
-# Genie Spaces
+# Creating Genie Spaces
 
-Genie Spaces are SQL-based data exploration interfaces that allow users to ask natural language questions about structured data.
+This guide covers creating and managing Genie Spaces for SQL-based data exploration.
 
 ## What is a Genie Space?
 
@@ -11,51 +11,21 @@ A Genie Space connects to Unity Catalog tables and translates natural language q
 3. **Executes** queries on a SQL warehouse
 4. **Presents** results in a conversational format
 
-## When to Use
-
-Use a Genie Space when:
-- You have structured data in Unity Catalog tables
-- Users need to explore data without writing SQL
-- You want to democratize data access for non-technical users
-
-## Prerequisites
-
-Before creating a Genie Space, you need:
-
-1. **Tables in Unity Catalog**: Bronze, silver, or gold tables with the data
-2. **SQL Warehouse**: A running warehouse to execute queries (auto-detected if not specified)
-
-### Creating the Required Tables
-
-Use these skills in sequence:
-
-1. **`synthetic-data-generation`**: Generate raw parquet files in a Volume
-2. **`spark-declarative-pipelines`**: Create bronze/silver/gold tables from the raw data
-
-Example data pipeline:
-```
-Volume (raw parquet) → Bronze (raw tables) → Silver (cleaned) → Gold (aggregated)
-```
-
-For Genie, typically connect to **silver or gold tables** for best results.
-
-## Creating a Genie Space
+## Creation Workflow
 
 ### Step 1: Inspect Table Schemas (Required)
 
-**Before creating a Genie Space, you MUST inspect the table schemas** to understand what data is available. Use `get_table_details` to fetch column information:
+**Before creating a Genie Space, you MUST inspect the table schemas** to understand what data is available:
 
 ```python
-# First, understand what tables and columns exist
 get_table_details(
     catalog="my_catalog",
     schema="sales",
-    table_stat_level="SIMPLE"  # Gets column names, types, and sample values
+    table_stat_level="SIMPLE"
 )
 ```
 
-This returns schema information including:
-
+This returns:
 - Table names and row counts
 - Column names and data types
 - Sample values and cardinality
@@ -72,7 +42,7 @@ Based on the schema information:
 
 ### Step 3: Create the Genie Space
 
-Now create the space with content tailored to the actual data:
+Create the space with content tailored to the actual data:
 
 ```python
 create_or_update_genie(
@@ -99,21 +69,17 @@ Tables join on customer_id and product_id.""",
 )
 ```
 
-### Why This Workflow Matters
+## Why This Workflow Matters
 
-Sample questions that reference **actual column names** help Genie:
-
+**Sample questions that reference actual column names** help Genie:
 - Learn the vocabulary of your data
 - Generate more accurate SQL queries
 - Provide better autocomplete suggestions
 
-A good description that explains **table relationships** helps Genie:
-
+**A description that explains table relationships** helps Genie:
 - Understand how to join tables correctly
 - Know which table contains which information
 - Provide more relevant answers
-
-The `warehouse_id` is optional - if not provided, the tool auto-detects the best available warehouse.
 
 ## Auto-Detection of Warehouse
 
@@ -148,7 +114,7 @@ Choose tables carefully for best results:
 
 Sample questions help users understand what they can ask:
 
-Good sample questions:
+**Good sample questions:**
 - "What were total sales last month?"
 - "Who are our top 10 customers by revenue?"
 - "How many orders were placed in Q4?"
@@ -185,33 +151,6 @@ Write sample questions that:
 - Demonstrate the data's capabilities
 - Use natural language (not SQL terms)
 
-## Example Workflow
-
-1. **Generate synthetic data** using `synthetic-data-generation` skill:
-   - Creates parquet files in `/Volumes/catalog/schema/raw_data/`
-
-2. **Create tables** using `spark-declarative-pipelines` skill:
-   - Creates `catalog.schema.bronze_*` → `catalog.schema.silver_*` → `catalog.schema.gold_*`
-
-3. **Create the Genie Space**:
-   - `display_name`: "My Data Explorer"
-   - `table_identifiers`: `["catalog.schema.silver_customers", "catalog.schema.silver_orders"]`
-
-4. **Add sample questions** to guide users
-
-5. **Test** in the Databricks UI
-
-## Finding Existing Genie Spaces
-
-To find an existing Genie space by name, use `find_genie_by_name`:
-
-```python
-find_genie_by_name(display_name="Sales Analytics")
-# Returns: {"found": True, "space_id": "abc123...", "display_name": "Sales Analytics", ...}
-```
-
-**IMPORTANT**: There is NO system table for Genie spaces. Do NOT try to query `system.ai.genie_spaces` or similar tables - they don't exist. Always use the `find_genie_by_name` tool to look up existing spaces.
-
 ## Updating a Genie Space
 
 To update an existing space:
@@ -221,6 +160,27 @@ To update an existing space:
 3. **Change warehouse**: Provide a different `warehouse_id`
 
 The tool finds the existing space by name and updates it.
+
+## Example End-to-End Workflow
+
+1. **Generate synthetic data** using `synthetic-data-generation` skill:
+   - Creates parquet files in `/Volumes/catalog/schema/raw_data/`
+
+2. **Create tables** using `spark-declarative-pipelines` skill:
+   - Creates `catalog.schema.bronze_*` → `catalog.schema.silver_*` → `catalog.schema.gold_*`
+
+3. **Inspect the tables**:
+   ```python
+   get_table_details(catalog="catalog", schema="schema")
+   ```
+
+4. **Create the Genie Space**:
+   - `display_name`: "My Data Explorer"
+   - `table_identifiers`: `["catalog.schema.silver_customers", "catalog.schema.silver_orders"]`
+
+5. **Add sample questions** based on actual column names
+
+6. **Test** in the Databricks UI
 
 ## Troubleshooting
 
@@ -240,3 +200,4 @@ The tool finds the existing space by name and updates it.
 - Use descriptive column names
 - Add table and column comments
 - Include sample questions that demonstrate the vocabulary
+- Add instructions via the Databricks Genie UI

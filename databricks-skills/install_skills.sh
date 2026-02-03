@@ -38,7 +38,7 @@ INSTALL_FROM_LOCAL=false
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # All available skills
-ALL_SKILLS="agent-bricks aibi-dashboards asset-bundles databricks-app-apx databricks-app-python databricks-config databricks-docs databricks-jobs databricks-python-sdk databricks-unity-catalog mlflow-evaluation model-serving spark-declarative-pipelines synthetic-data-generation unstructured-pdf-generation"
+ALL_SKILLS="agent-bricks aibi-dashboards asset-bundles databricks-app-apx databricks-app-python databricks-config databricks-docs databricks-genie databricks-jobs databricks-python-sdk databricks-unity-catalog mlflow-evaluation spark-declarative-pipelines synthetic-data-generation unstructured-pdf-generation"
 
 # Get skill description
 get_skill_description() {
@@ -50,6 +50,7 @@ get_skill_description() {
         "databricks-app-python") echo "Databricks Apps with Python (Dash, Streamlit)" ;;
         "databricks-config") echo "Profile authentication setup for Databricks" ;;
         "databricks-docs") echo "Documentation reference via llms.txt" ;;
+        "databricks-genie") echo "Genie Spaces - create, curate, and query via Conversation API" ;;
         "databricks-jobs") echo "Databricks Lakeflow Jobs - workflow orchestration" ;;
         "databricks-python-sdk") echo "Databricks Python SDK, Connect, and REST API" ;;
         "databricks-unity-catalog") echo "System tables for lineage, audit, billing" ;;
@@ -65,8 +66,9 @@ get_skill_description() {
 # Get extra files for a skill (besides SKILL.md)
 get_skill_extra_files() {
     case "$1" in
-        "agent-bricks") echo "1-knowledge-assistants.md 2-genie-spaces.md 3-multi-agent-supervisors.md" ;;
+        "agent-bricks") echo "1-knowledge-assistants.md 3-multi-agent-supervisors.md" ;;
         "aibi-dashboards") echo "widget-reference.md sql-patterns.md" ;;
+        "databricks-genie") echo "spaces.md conversation.md" ;;
         "asset-bundles") echo "alerts_guidance.md SDP_guidance.md" ;;
         "databricks-app-apx") echo "backend-patterns.md best-practices.md frontend-patterns.md" ;;
         "databricks-app-python") echo "dash.md streamlit.md README.md" ;;
