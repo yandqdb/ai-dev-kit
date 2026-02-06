@@ -145,13 +145,6 @@ INGESTION_CONFIG = {
 }
 ```
 
-### Performance Considerations
-
-Generate enough records to test streaming patterns effectively:
-- **Minimum**: 100 records for basic functionality testing
-- **Moderate**: 1,000 records for performance evaluation
-- **High-volume**: 10,000+ records for stress testing
-
 ## Script Structure
 
 Always structure scripts with configuration variables at the top:
@@ -322,7 +315,7 @@ from zerobus.sdk import ZerobusSdk, TableProperties, StreamConfigurationOptions,
 # =============================================================================
 # CONFIGURATION - Edit these values
 # =============================================================================
-WORKSPACE_URL = "https://e2-demo-field-eng.cloud.databricks.com"
+WORKSPACE_URL = "workspace_url"
 CLIENT_ID = "your-service-principal-id"
 CLIENT_SECRET = "your-service-principal-secret"
 TABLE_NAME = "catalog.schema.table_name"
@@ -548,19 +541,6 @@ If it fails, edit the file and re-run with the same `cluster_id` and `context_id
 10. **Libraries**: Install ZeroBus SDK first if import errors occur
 11. **Authentication**: Use service principal credentials with proper permissions
 12. **Verification**: Check workspace connectivity and table access before ingestion
-13. **Always use files**: Write to local file, execute, edit if error, re-execute
-14. **Timeout management**: Set reasonable acknowledgment timeouts (30s recommended)
-
-## Proven Results
-
-**Successful Execution Metrics** (verified 2026-02-05):
-- ✅ **1,486 records successfully ingested** using ZeroBus SDK
-- ✅ **100% success rate** after timestamp format fix
-- ✅ **Batch processing**: 20 batches of 50 records each
-- ✅ **Target table**: users.dong_qiaoyang.location
-- ✅ **ID range**: 900000-900999 (string format)
-- ✅ **Locations**: 10 rotating California addresses
-- ✅ **Timestamps**: Unix integer format (e.g., 1738742400)
 
 ## Expected Success Indicators
 
