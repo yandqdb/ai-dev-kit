@@ -10,8 +10,8 @@ from fastmcp import FastMCP
 # Create the server
 mcp = FastMCP("Databricks MCP Server")
 
-# Import and register all tools
-from .tools import (
+# Import and register all tools (side-effect imports: each module registers @mcp.tool decorators)
+from .tools import (  # noqa: F401, E402
     sql,
     compute,
     file,
@@ -23,6 +23,7 @@ from .tools import (
     unity_catalog,
     volume_files,
     genie,
+    manifest,
     vector_search,
     lakebase,
 )

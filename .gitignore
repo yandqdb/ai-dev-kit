@@ -54,6 +54,9 @@ Thumbs.db
 *.secret
 credentials.json
 
+# Resource tracking manifest (created by MCP server)
+.databricks-resources.json
+
 # Test coverage
 .coverage
 htmlcov/
