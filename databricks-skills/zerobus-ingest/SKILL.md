@@ -19,6 +19,11 @@ ZeroBus Ingest provides high-performance streaming data ingestion to Databricks 
 | `client_id` | string | Yes | - | client_id |
 | `client_secret` | string | Yes | - | client_id |
 
+
+## Important
+- Never install local packages 
+- Always validate MCP server requirement before execution
+
 ## Common Libraries
 
 These libraries are essential for ZeroBus data ingestion:
@@ -88,6 +93,7 @@ The library is immediately available in the same context.
 ## 🚨 Critical Learning: Timestamp Format Fix
 
 **BREAKTHROUGH**: ZeroBus requires **timestamp fields as Unix integer timestamps**, NOT string timestamps.
+The timestamp generation must use microseconds for Databricks.
 
 ### ❌ What Doesn't Work:
 ```python
